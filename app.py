@@ -1,53 +1,267 @@
-import streamlit as st
 import torch
 import torch.nn as nn
+import streamlit as st
 from torchvision import transforms
 from PIL import Image
 
-# =========================================================
-# PAGE CONFIG
-# =========================================================
 
 st.set_page_config(
-    page_title="Cow vs Buffalo Classifier",
+    page_title="Cow vs Buffalo AI",
     page_icon="🐄",
-    layout="centered"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
+
+def render_html(html):
+    clean_html = "\n".join(
+        line.lstrip()
+        for line in html.splitlines()
+    )
+
+    st.markdown(
+        clean_html,
+        unsafe_allow_html=True
+    )
+
+
 # =========================================================
-# DEVICE
+# CUSTOM CSS
 # =========================================================
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+render_html("""
+<style>
 
-# =========================================================
-# CLASS NAMES
-# IMPORTANT:
-# Keep the same order used during training
-# =========================================================
+    /* Main background */
+    .stApp {
+        background: #f6f8fb;
+    }
 
-class_names = ["Buffalo", "Cow"]
+    /* Remove default top padding */
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 3rem;
+        max-width: 1200px;
+    }
+
+    /* Header */
+    .hero {
+        background: linear-gradient(135deg, #166534, #15803d);
+        padding: 35px 40px;
+        border-radius: 22px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 10px 30px rgba(22, 101, 52, 0.15);
+    }
+
+    .hero h1 {
+        font-size: 38px;
+        font-weight: 750;
+        margin-bottom: 8px;
+    }
+
+    .hero p {
+        font-size: 16px;
+        opacity: 0.9;
+        margin: 0;
+    }
+
+    /* Cards */
+    .card {
+        background: white;
+        padding: 25px;
+        border-radius: 18px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.04);
+        height: 100%;
+    }
+
+    .card-title {
+        font-size: 20px;
+        font-weight: 700;
+        color: #111827;
+        margin-bottom: 5px;
+    }
+
+    .card-subtitle {
+        color: #6b7280;
+        font-size: 14px;
+        margin-bottom: 20px;
+    }
+
+    /* Prediction */
+    .prediction-card {
+        background: linear-gradient(135deg, #ffffff, #f0fdf4);
+        border: 1px solid #bbf7d0;
+        padding: 30px;
+        border-radius: 20px;
+        text-align: center;
+        margin-top: 20px;
+    }
+
+    .prediction-label {
+        color: #6b7280;
+        font-size: 14px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .prediction-name {
+        color: #166534;
+        font-size: 38px;
+        font-weight: 800;
+        margin: 8px 0;
+    }
+
+    .confidence {
+        font-size: 20px;
+        font-weight: 700;
+        color: #111827;
+    }
+
+    /* Info cards */
+    .info-box {
+        background: white;
+        border: 1px solid #e5e7eb;
+        padding: 18px;
+        border-radius: 15px;
+        text-align: center;
+    }
+
+    .info-number {
+        font-size: 24px;
+        font-weight: 750;
+        color: #166534;
+    }
+
+    .info-text {
+        font-size: 13px;
+        color: #6b7280;
+        margin-top: 3px;
+    }
+
+    /* Footer */
+    .footer {
+        text-align: center;
+        color: #9ca3af;
+        font-size: 13px;
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid #e5e7eb;
+    }
+
+    /* Upload area */
+    [data-testid="stFileUploader"] {
+        background: #f9fafb;
+        border: 2px dashed #86efac;
+        border-radius: 16px;
+        padding: 10px;
+    }
+
+    /* Button */
+    .stButton > button {
+        width: 100%;
+        border-radius: 10px;
+        font-weight: 600;
+    }
+
+</style>
+""")
+
 
 # =========================================================
 # MODEL
 # =========================================================
 
+class SimpleCNN(nn.Module):
+
+    def __init__(self, num_classes=2):
+
+        super(SimpleCNN, self).__init__()
+
+        self.features = nn.Sequential(
+
+            nn.Conv2d(
+                3,
+                16,
+                kernel_size=3,
+                padding=1
+            ),
+
+            nn.ReLU(),
+
+            nn.MaxPool2d(
+                kernel_size=2,
+                stride=2
+            ),
+
+            nn.Conv2d(
+                16,
+                32,
+                kernel_size=3,
+                padding=1
+            ),
+
+            nn.ReLU(),
+
+            nn.MaxPool2d(
+                kernel_size=2,
+                stride=2
+            )
+        )
+
+        self.classifier = nn.Sequential(
+
+            nn.Flatten(),
+
+            nn.Linear(
+                32 * 62 * 62,
+                128
+            ),
+
+            nn.ReLU(),
+
+            nn.Dropout(0.5),
+
+            nn.Linear(
+                128,
+                num_classes
+            )
+        )
+
+    def forward(self, x):
+
+        x = self.features(x)
+
+        x = self.classifier(x)
+
+        return x
+
+
+# =========================================================
+# DEVICE
+# =========================================================
+
+device = torch.device("cpu")
+
+
+# =========================================================
+# LOAD MODEL
+# =========================================================
+
 @st.cache_resource
 def load_model():
 
-    # -----------------------------------------------------
-    # IMPORTANT:
-    # Replace this section with the SAME model architecture
-    # that you used while training.
-    # -----------------------------------------------------
-
     model = torch.load(
         "model.pth",
-        map_location=device,
+        map_location="cpu",
         weights_only=False
     )
 
-    model = model.to(device)
+    # Convert FP16 → FP32
+    model = model.float()
+
     model.eval()
 
     return model
@@ -55,41 +269,224 @@ def load_model():
 
 model = load_model()
 
+
 # =========================================================
-# TEST TRANSFORM
-# SAME TRANSFORM USED DURING TRAINING
+# CLASS NAMES
 # =========================================================
 
-test_transforms = transforms.Compose([
-    transforms.Resize((250, 250)),
-    transforms.ToTensor(),
-    transforms.Normalize(
-        mean=[0.485, 0.456, 0.406],
-        std=[0.229, 0.224, 0.225]
-    )
+class_names = [
+    "Buffalo",
+    "Cow"
+]
+
+
+# =========================================================
+# TRANSFORM
+# =========================================================
+
+transform = transforms.Compose([
+
+    transforms.Resize(
+        (250, 250)
+    ),
+
+    transforms.ToTensor()
 ])
 
+
 # =========================================================
-# TITLE
+# HERO
 # =========================================================
 
-st.title("🐄 Cow vs Buffalo Classifier")
+render_html("""
+<div class="hero">
 
-st.write(
-    "Upload an image of a cow or buffalo "
-    "to test the trained deep learning model."
+    <h1>🐄 Cow vs Buffalo AI</h1>
+
+    <p>
+        Intelligent image classification using a Convolutional Neural Network
+    </p>
+
+</div>
+""")
+
+
+# =========================================================
+# INFO CARDS
+# =========================================================
+
+info1, info2, info3, info4 = st.columns(4)
+
+with info1:
+
+    render_html("""
+    <div class="info-box">
+
+        <div class="info-number">AI</div>
+
+        <div class="info-text">
+            Classification
+        </div>
+
+    </div>
+    """)
+
+
+with info2:
+
+    render_html("""
+    <div class="info-box">
+
+        <div class="info-number">CNN</div>
+
+        <div class="info-text">
+            Deep Learning
+        </div>
+
+    </div>
+    """)
+
+
+with info3:
+
+    render_html("""
+    <div class="info-box">
+
+        <div class="info-number">250×250</div>
+
+        <div class="info-text">
+            Input Image
+        </div>
+
+    </div>
+    """)
+
+
+with info4:
+
+    render_html("""
+    <div class="info-box">
+
+        <div class="info-number">2</div>
+
+        <div class="info-text">
+            Classes
+        </div>
+
+    </div>
+    """)
+
+
+st.write("")
+
+
+# =========================================================
+# MAIN CONTENT
+# =========================================================
+
+left, right = st.columns(
+    [1, 1],
+    gap="large"
 )
 
-st.divider()
 
 # =========================================================
-# UPLOAD IMAGE
+# LEFT - UPLOAD
 # =========================================================
 
-uploaded_file = st.file_uploader(
-    "Upload an image",
-    type=["jpg", "jpeg", "png"]
-)
+with left:
+
+    render_html("""
+    <div class="card">
+
+        <div class="card-title">
+            📤 Upload Image
+        </div>
+
+        <div class="card-subtitle">
+            Upload a clear image of a cow or buffalo
+        </div>
+
+    </div>
+    """)
+
+    uploaded_file = st.file_uploader(
+        "Choose an image",
+        type=[
+            "jpg",
+            "jpeg",
+            "png"
+        ],
+        label_visibility="collapsed"
+    )
+
+    if uploaded_file is None:
+
+        st.info(
+            "Supported formats: JPG, JPEG and PNG"
+        )
+
+
+# =========================================================
+# RIGHT - PREVIEW
+# =========================================================
+
+with right:
+
+    render_html("""
+    <div class="card">
+
+        <div class="card-title">
+            🖼️ Image Preview
+        </div>
+
+        <div class="card-subtitle">
+            Your uploaded image will appear here
+        </div>
+
+    </div>
+    """)
+
+    if uploaded_file is not None:
+
+        image = Image.open(
+            uploaded_file
+        ).convert("RGB")
+
+        st.image(
+            image,
+            use_container_width=True
+        )
+
+    else:
+
+        render_html("""
+        <div style="
+            height:280px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            background:#f9fafb;
+            border-radius:15px;
+            color:#9ca3af;
+            border:1px solid #e5e7eb;
+        ">
+
+            <div style="text-align:center">
+
+                <div style="font-size:45px;">
+                    🖼️
+                </div>
+
+                <div>
+                    No image selected
+                </div>
+
+            </div>
+
+        </div>
+        """)
+
 
 # =========================================================
 # PREDICTION
@@ -97,103 +494,135 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file is not None:
 
-    # Load image
-    image = Image.open(uploaded_file).convert("RGB")
+    st.write("")
 
-    # Display image
-    st.subheader("Uploaded Image")
+    image_tensor = transform(image)
 
-    st.image(
-        image,
-        caption="Input Image",
-        use_container_width=True
-    )
+    image_tensor = image_tensor.unsqueeze(0)
 
-    # -----------------------------------------------------
-    # Apply transformations
-    # -----------------------------------------------------
+    image_tensor = image_tensor.float()
 
-    input_tensor = test_transforms(image)
+    image_tensor = image_tensor.to(device)
 
-    # Add batch dimension
-    input_batch = input_tensor.unsqueeze(0)
 
-    # Move to device
-    input_batch = input_batch.to(device)
+    with st.spinner("AI is analyzing the image..."):
 
-    # -----------------------------------------------------
-    # Prediction
-    # -----------------------------------------------------
+        with torch.no_grad():
 
-    with torch.no_grad():
+            outputs = model(
+                image_tensor
+            )
 
-        output = model(input_batch)
+            probabilities = torch.softmax(
+                outputs,
+                dim=1
+            )
 
-        # For classification model
-        probabilities = torch.softmax(output, dim=1)
+            predicted_class = torch.argmax(
+                probabilities,
+                dim=1
+            ).item()
 
-        confidence, predicted_idx = torch.max(
-            probabilities,
-            dim=1
-        )
+            confidence = probabilities[
+                0,
+                predicted_class
+            ].item()
 
-    # -----------------------------------------------------
-    # Get result
-    # -----------------------------------------------------
 
-    predicted_class = class_names[predicted_idx.item()]
+    predicted_name = class_names[
+        predicted_class
+    ]
 
-    confidence_percentage = confidence.item() * 100
 
-    # -----------------------------------------------------
-    # Display result
-    # -----------------------------------------------------
+    # =====================================================
+    # RESULT
+    # =====================================================
 
-    st.divider()
+    render_html(f"""
+    <div class="prediction-card">
 
-    st.subheader("Prediction")
+        <div class="prediction-label">
+            AI Prediction
+        </div>
 
-    if predicted_class == "Cow":
+        <div class="prediction-name">
+            🐄 {predicted_name}
+        </div>
 
-        st.success(
-            f"🐄 Prediction: {predicted_class}"
-        )
+        <div class="confidence">
+            Confidence: {confidence * 100:.2f}%
+        </div>
 
-    else:
+    </div>
+    """)
 
-        st.info(
-            f"🐃 Prediction: {predicted_class}"
-        )
 
-    st.metric(
-        "Confidence",
-        f"{confidence_percentage:.2f}%"
-    )
+    # =====================================================
+    # CONFIDENCE BAR
+    # =====================================================
+
+    st.write("")
 
     st.progress(
-        confidence.item()
+        confidence,
+        text=f"Model Confidence — {confidence * 100:.2f}%"
     )
 
-    # -----------------------------------------------------
-    # Show probabilities
-    # -----------------------------------------------------
 
-    st.subheader("Class Probabilities")
+    # =====================================================
+    # CLASS PROBABILITIES
+    # =====================================================
 
-    for i, class_name in enumerate(class_names):
+    st.write("")
 
-        probability = probabilities[0][i].item() * 100
+    st.markdown(
+        "### 📊 Class Probabilities"
+    )
 
-        st.write(
-            f"{class_name}: {probability:.2f}%"
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        buffalo_prob = probabilities[
+            0,
+            0
+        ].item()
+
+        st.metric(
+            "🐃 Buffalo",
+            f"{buffalo_prob * 100:.2f}%"
         )
 
         st.progress(
-            probabilities[0][i].item()
+            buffalo_prob
         )
 
-else:
 
-    st.info(
-        "👆 Upload a Cow or Buffalo image to start prediction."
-    )
+    with col2:
+
+        cow_prob = probabilities[
+            0,
+            1
+        ].item()
+
+        st.metric(
+            "🐄 Cow",
+            f"{cow_prob * 100:.2f}%"
+        )
+
+        st.progress(
+            cow_prob
+        )
+
+
+# =========================================================
+# FOOTER
+# =========================================================
+
+render_html("""
+<div class="footer">
+
+    Cow vs Buffalo Classification • Powered by PyTorch CNN
+
+</div>
+""")
