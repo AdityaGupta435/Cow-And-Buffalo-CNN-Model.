@@ -238,7 +238,6 @@ class SimpleCNN(nn.Module):
 
         return x
 
-
 # =========================================================
 # DEVICE
 # =========================================================
@@ -259,17 +258,62 @@ def load_model():
         weights_only=False
     )
 
-    # Convert FP16 → FP32
+    def convert_quantized_linear(module):
+
+        for name, child in list(module.named_children()):
+
+            # Dynamic Quantized Linear
+            if isinstance(
+                child,
+                torch.ao.nn.quantized.dynamic.Linear
+            ):
+
+                # Get quantized weight
+                quantized_weight = child.weight()
+
+                # Convert weight back to FP32
+                weight = quantized_weight.dequantize()
+
+                # Get bias
+                bias = child.bias()
+
+                # Create normal Linear layer
+                new_linear = nn.Linear(
+                    child.in_features,
+                    child.out_features,
+                    bias=bias is not None
+                )
+
+                # Copy weights
+                new_linear.weight.data.copy_(weight)
+
+                # Copy bias
+                if bias is not None:
+                    new_linear.bias.data.copy_(
+                        bias.detach().float()
+                    )
+
+                # Replace quantized layer
+                module._modules[name] = new_linear
+
+            else:
+                convert_quantized_linear(child)
+
+        return module
+
+    # Quantized Linear → normal Linear
+    model = convert_quantized_linear(model)
+
+    # FP16 → FP32
     model = model.float()
 
+    # Evaluation mode
     model.eval()
 
     return model
 
 
 model = load_model()
-
-
 # =========================================================
 # CLASS NAMES
 # =========================================================
